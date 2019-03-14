@@ -1,0 +1,50 @@
+{
+    "name": "SiameseNetwork",
+    "n_gpu": 1,
+    
+    "arch": {
+        "type": "SiameseNetwork",
+        "args": {}
+    },
+    "data_loader": {
+        "type": "SiameseNetworkDataLoader",
+        "args":{
+            "data_dir": "./data/faces/training/",
+            "batch_size": 64,
+            "shuffle": true,
+            "validation_split": 0.1,
+            "num_workers": 4
+        }
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args":{
+            "lr": 0.0005,
+            "weight_decay": 0,
+            "amsgrad": false
+        }
+    },
+    "loss": "ContrastiveLoss",
+    "metrics": [
+        "my_metric"
+    ],
+    "lr_scheduler": {
+        "type": "StepLR",
+        "args": {
+            "step_size": 50,
+            "gamma": 0.1
+        }
+    },
+    "trainer": {
+        "epochs": 100,
+        "save_dir": "saved/",
+        "save_period": 1,
+        "verbosity": 2,
+        
+        "monitor": "min val_loss",
+        "early_stop": 10,
+        
+        "tensorboardX": true,
+        "log_dir": "saved/runs"
+    }
+}
