@@ -218,18 +218,18 @@ class DefectDataset(torch.utils.data.Dataset):
 
             if random.choice([True, False]):
                 # same image
-                image1 = normal_img.resize((100, 100), Image.ANTIALIAS)
+                image1 = normal_img.resize((720, 720), Image.ANTIALIAS)
                 image2 = normal_aug_img
                 label = np.array([0.], dtype=np.float)
             else:
                 # difference image
-                image1 = normal_img.resize((100, 100), Image.ANTIALIAS)
-                image2 = defect_img.resize((100, 100), Image.ANTIALIAS)
+                image1 = normal_img.resize((720, 720), Image.ANTIALIAS)
+                image2 = defect_img.resize((720, 720), Image.ANTIALIAS)
                 label = np.array([1.], dtype=np.float)
 
         elif self.transform == None:
-            image1 = normal_img.resize((100, 100), Image.ANTIALIAS)
-            image2 = defect_img.resize((100, 100), Image.ANTIALIAS)
+            image1 = normal_img.resize((720, 720), Image.ANTIALIAS)
+            image2 = defect_img.resize((720, 720), Image.ANTIALIAS)
 
         image1 = image1.convert('L')
         image2 = image2.convert('L')
@@ -391,161 +391,163 @@ class DefectDataset(torch.utils.data.Dataset):
         return [relative_x_of_center, relative_y_of_center,
                 relative_box_width, relative_box_height]
 
-# Augmentation Demo
-seq = iaa.Sequential([
-            #iaa.Resize({"height": 100, "width": 100}),
-            iaa.SomeOf(2, [iaa.Multiply((1, 1.1)),  # change brightness, doesn't affect BBs
-                            iaa.Affine(
-                                translate_px={"x": 5, "y": 5},
-                                scale=(1, 1)
-                            ),  # translate by 40/60px on x/y axis, and scale to 50-70%, affects BBs
-                            iaa.GaussianBlur(sigma=(0.0, 0.1)),
-                            iaa.Affine(rotate=(-10, 10)),
-                            ])
-            #iaa.Sharpen(alpha=(0, 0.0001)),
-            #iaa.Fliplr(0.5)
-            ])
 
-#seq = iaa.Sometimes(0.5, iaa.Crop(percent=(0.4)))
-#seq = iaa.Sequential([iaa.Crop(percent=(0.3))])
-composed = transforms.Compose([Augmenter(seq)])
+if __name__ == "__main__":
+    # Augmentation Demo
+    seq = iaa.Sequential([
+                #iaa.Resize({"height": 100, "width": 100}),
+                iaa.SomeOf(2, [iaa.Multiply((1, 1.1)),  # change brightness, doesn't affect BBs
+                                iaa.Affine(
+                                    translate_px={"x": 5, "y": 5},
+                                    scale=(1, 1)
+                                ),  # translate by 40/60px on x/y axis, and scale to 50-70%, affects BBs
+                                iaa.GaussianBlur(sigma=(0.0, 0.1)),
+                                iaa.Affine(rotate=(-10, 10)),
+                                ])
+                #iaa.Sharpen(alpha=(0, 0.0001)),
+                #iaa.Fliplr(0.5)
+                ])
 
-siamese_dataset = DefectDataset(root=Config.training_dir, transform=composed)
+    #seq = iaa.Sometimes(0.5, iaa.Crop(percent=(0.4)))
+    #seq = iaa.Sequential([iaa.Crop(percent=(0.3))])
+    composed = transforms.Compose([Augmenter(seq)])
 
-vis_dataloader = DataLoader(siamese_dataset,
-                        shuffle=True,
-                        num_workers=0,
-                        batch_size=8)
+    siamese_dataset = DefectDataset(root=Config.training_dir, transform=composed)
 
-dataiter = iter(vis_dataloader)
+    vis_dataloader = DataLoader(siamese_dataset,
+                            shuffle=True,
+                            num_workers=0,
+                            batch_size=8)
 
-
-example_batch = next(dataiter)
-concatenated = torch.cat((example_batch[0],example_batch[1]),0)
-imshow(torchvision.utils.make_grid(concatenated))
-print(example_batch[2].numpy())
-print(example_batch[0].shape)
+    dataiter = iter(vis_dataloader)
 
 
-class SiameseNetwork(nn.Module):
-    def __init__(self):
-        super(SiameseNetwork, self).__init__()
-        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        self.cnn1 = nn.Sequential(
-            nn.ReflectionPad2d(1),
-            nn.Conv2d(1, 4, kernel_size=3),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(4),
+    example_batch = next(dataiter)
+    concatenated = torch.cat((example_batch[0],example_batch[1]),0)
+    imshow(torchvision.utils.make_grid(concatenated))
+    print(example_batch[2].numpy())
+    print(example_batch[0].shape)
 
-            nn.ReflectionPad2d(1),
-            nn.Conv2d(4, 8, kernel_size=3),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(8),
 
-            nn.ReflectionPad2d(1),
-            nn.Conv2d(8, 8, kernel_size=3),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(8),
+    class SiameseNetwork(nn.Module):
+        def __init__(self):
+            super(SiameseNetwork, self).__init__()
+            self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+            self.cnn1 = nn.Sequential(
+                nn.ReflectionPad2d(1),
+                nn.Conv2d(1, 4, kernel_size=3),
+                nn.ReLU(inplace=True),
+                nn.BatchNorm2d(4),
 
-        )
+                nn.ReflectionPad2d(1),
+                nn.Conv2d(4, 8, kernel_size=3),
+                nn.ReLU(inplace=True),
+                nn.BatchNorm2d(8),
 
-        self.fc1 = nn.Sequential(
-            nn.Linear(8 * 720 * 720, 500),
-            nn.ReLU(inplace=True),
+                nn.ReflectionPad2d(1),
+                nn.Conv2d(8, 8, kernel_size=3),
+                nn.ReLU(inplace=True),
+                nn.BatchNorm2d(8),
 
-            nn.Linear(500, 500),
-            nn.ReLU(inplace=True),
+            )
 
-            nn.Linear(500, 5))
+            self.fc1 = nn.Sequential(
+                nn.Linear(8 * 720 * 720, 500),
+                nn.ReLU(inplace=True),
 
-    def forward_once(self, x):
-        output = self.cnn1(x)
-        output = output.view(output.size()[0], -1)
-        output = self.fc1(output)
-        return output
+                nn.Linear(500, 500),
+                nn.ReLU(inplace=True),
 
-    def forward(self, input1, input2):
-        output1 = self.forward_once(input1)
-        output2 = self.forward_once(input2)
-        return output1, output2
+                nn.Linear(500, 5))
 
-    def summary(self):
-        summary(self, torch.zeros((1, 1, 720, 720)), input2=torch.zeros((1, 1, 720, 720)))
+        def forward_once(self, x):
+            output = self.cnn1(x)
+            output = output.view(output.size()[0], -1)
+            output = self.fc1(output)
+            return output
 
-class ContrastiveLoss(torch.nn.Module):
+        def forward(self, input1, input2):
+            output1 = self.forward_once(input1)
+            output2 = self.forward_once(input2)
+            return output1, output2
 
-    def __init__(self, margin=2.0):
-        super(ContrastiveLoss, self).__init__()
-        self.margin = margin
+        def summary(self):
+            summary(self, torch.zeros((1, 1, 720, 720)), input2=torch.zeros((1, 1, 720, 720)))
 
-    def forward(self, output1, output2, label):
+    class ContrastiveLoss(torch.nn.Module):
+
+        def __init__(self, margin=2.0):
+            super(ContrastiveLoss, self).__init__()
+            self.margin = margin
+
+        def forward(self, output1, output2, label):
+            euclidean_distance = F.pairwise_distance(output1, output2)
+            loss_contrastive = torch.mean((1-label) * torch.pow(euclidean_distance, 2) +
+                                          (label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
+
+
+            return loss_contrastive
+
+    train_dataloader = DataLoader(siamese_dataset,
+                            shuffle=True,
+                            num_workers=0,
+                            batch_size=Config.train_batch_size)
+
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+    net = SiameseNetwork().to(device)
+    criterion = ContrastiveLoss()
+    optimizer = optim.Adam(net.parameters(),lr = 0.0005)
+
+    counter = []
+    loss_history = []
+    iteration_number= 0
+
+    for epoch in range(0, Config.train_number_epochs):
+        for i, data in enumerate(train_dataloader, 0):
+            img0, img1, label = data
+            img0, img1, label = img0.to(device), img1.to(device), label.to(device)
+
+            optimizer.zero_grad()
+            output1, output2 = net(img0, img1)
+
+            label = label.double()
+            output1 = output1.double()
+            output2 = output2.double()
+
+            loss_contrastive = criterion(output1, output2, label)
+            loss_contrastive.backward()
+            optimizer.step()
+            if i % 10 == 0:
+                print("Epoch number {}\n Current loss {}\n".format(epoch, loss_contrastive.item()))
+                iteration_number += 10
+                counter.append(iteration_number)
+                loss_history.append(loss_contrastive.item())
+
+    show_plot(counter, loss_history)
+
+    save_checkpoint({
+                    'epoch': epoch + 1,
+                    'arch': "YOLOv1",
+                    'state_dict': net.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                }, False, filename=os.path.join("./", 'result.pth.tar'))
+
+
+    # TEST
+
+    """
+    siamese_dataset = DefectDataset(root=Config.testing_dir, transform=None)
+    
+    test_dataloader = DataLoader(siamese_dataset, num_workers=6, batch_size=1, shuffle=True)
+    dataiter = iter(test_dataloader)
+    x0, _, _ = next(dataiter)
+    
+    for i in range(10):
+        _, x1, label2 = next(dataiter)
+        concatenated = torch.cat((x0, x1), 0)
+    
+        output1, output2 = net(Variable(x0).cuda(), Variable(x1).cuda())
         euclidean_distance = F.pairwise_distance(output1, output2)
-        loss_contrastive = torch.mean((1-label) * torch.pow(euclidean_distance, 2) +
-                                      (label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
-
-
-        return loss_contrastive
-
-train_dataloader = DataLoader(siamese_dataset,
-                        shuffle=True,
-                        num_workers=0,
-                        batch_size=Config.train_batch_size)
-
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
-net = SiameseNetwork().to(device)
-criterion = ContrastiveLoss()
-optimizer = optim.Adam(net.parameters(),lr = 0.0005)
-
-counter = []
-loss_history = []
-iteration_number= 0
-
-for epoch in range(0, Config.train_number_epochs):
-    for i, data in enumerate(train_dataloader, 0):
-        img0, img1, label = data
-        img0, img1, label = img0.to(device), img1.to(device), label.to(device)
-
-        optimizer.zero_grad()
-        output1, output2 = net(img0, img1)
-
-        label = label.double()
-        output1 = output1.double()
-        output2 = output2.double()
-
-        loss_contrastive = criterion(output1, output2, label)
-        loss_contrastive.backward()
-        optimizer.step()
-        if i % 10 == 0:
-            print("Epoch number {}\n Current loss {}\n".format(epoch, loss_contrastive.item()))
-            iteration_number += 10
-            counter.append(iteration_number)
-            loss_history.append(loss_contrastive.item())
-
-show_plot(counter, loss_history)
-
-save_checkpoint({
-                'epoch': epoch + 1,
-                'arch': "YOLOv1",
-                'state_dict': net.state_dict(),
-                'optimizer': optimizer.state_dict(),
-            }, False, filename=os.path.join("./", 'result.pth.tar'))
-
-
-# TEST
-
-"""
-siamese_dataset = DefectDataset(root=Config.testing_dir, transform=None)
-
-test_dataloader = DataLoader(siamese_dataset, num_workers=6, batch_size=1, shuffle=True)
-dataiter = iter(test_dataloader)
-x0, _, _ = next(dataiter)
-
-for i in range(10):
-    _, x1, label2 = next(dataiter)
-    concatenated = torch.cat((x0, x1), 0)
-
-    output1, output2 = net(Variable(x0).cuda(), Variable(x1).cuda())
-    euclidean_distance = F.pairwise_distance(output1, output2)
-    imshow(torchvision.utils.make_grid(concatenated), 'Dissimilarity: {:.2f}'.format(euclidean_distance.item()))
-"""
+        imshow(torchvision.utils.make_grid(concatenated), 'Dissimilarity: {:.2f}'.format(euclidean_distance.item()))
+    """
