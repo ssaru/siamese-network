@@ -40,6 +40,7 @@ class Config():
     testing_dir = "./dataset/testing/"
     train_batch_size = 64
     train_number_epochs = 100
+    RESIZE = (300, 300)
 
 class Augmenter():
 
@@ -218,18 +219,18 @@ class DefectDataset(torch.utils.data.Dataset):
 
             if random.choice([True, False]):
                 # same image
-                image1 = normal_img.resize((500, 500), Image.ANTIALIAS)
+                image1 = normal_img.resize((Config.RESIZE[0], Config.RESIZE[1]), Image.ANTIALIAS)
                 image2 = normal_aug_img
                 label = np.array([0.], dtype=np.float)
             else:
                 # difference image
-                image1 = normal_img.resize((500, 500), Image.ANTIALIAS)
-                image2 = defect_img.resize((500, 500), Image.ANTIALIAS)
+                image1 = normal_img.resize((Config.RESIZE[0], Config.RESIZE[1]), Image.ANTIALIAS)
+                image2 = defect_img.resize((Config.RESIZE[0], Config.RESIZE[1]), Image.ANTIALIAS)
                 label = np.array([1.], dtype=np.float)
 
         elif self.transform == None:
-            image1 = normal_img.resize((500, 500), Image.ANTIALIAS)
-            image2 = defect_img.resize((500, 500), Image.ANTIALIAS)
+            image1 = normal_img.resize((Config.RESIZE[0], Config.RESIZE[1]), Image.ANTIALIAS)
+            image2 = defect_img.resize((Config.RESIZE[0], Config.RESIZE[1]), Image.ANTIALIAS)
 
         image1 = image1.convert('L')
         image2 = image2.convert('L')
@@ -392,7 +393,8 @@ class DefectDataset(torch.utils.data.Dataset):
                 relative_box_width, relative_box_height]
 
 class SiameseNetwork(nn.Module):
-    def __init__(self):
+    def __init__(self, size):
+        self.size = size
         super(SiameseNetwork, self).__init__()
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.cnn1 = nn.Sequential(
@@ -414,7 +416,7 @@ class SiameseNetwork(nn.Module):
         )
 
         self.fc1 = nn.Sequential(
-            nn.Linear(8 * 500 * 500, 500),
+            nn.Linear(8 * self.size[0] * self.size[1], 500),
             nn.ReLU(inplace=True),
 
             nn.Linear(500, 500),
@@ -434,7 +436,7 @@ class SiameseNetwork(nn.Module):
         return output1, output2
 
     def summary(self):
-        summary(self, torch.zeros((1, 1, 500, 500)), input2=torch.zeros((1, 1, 500, 500)))
+        summary(self, torch.zeros((1, 1, self.size[0], self.size[1])), input2=torch.zeros((1, 1, self.size[0], self.size[1])))
 
 
 class ContrastiveLoss(torch.nn.Module):
@@ -454,7 +456,7 @@ class ContrastiveLoss(torch.nn.Module):
 if __name__ == "__main__":
     # Augmentation Demo
     seq = iaa.Sequential([
-                iaa.Resize({"height": 500, "width": 500}),
+                iaa.Resize({"height": Config.RESIZE[0], "width": Config.RESIZE[1]}),
                 iaa.SomeOf(2, [iaa.Multiply((1, 1.1)),  # change brightness, doesn't affect BBs
                                 iaa.Affine(
                                     translate_px={"x": 5, "y": 5},
@@ -494,7 +496,7 @@ if __name__ == "__main__":
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    net = SiameseNetwork()
+    net = SiameseNetwork(size=(300, 300))
 
     if device.type == 'cpu':
         model = torch.nn.DataParallel(net)
