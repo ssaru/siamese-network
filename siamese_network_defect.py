@@ -35,13 +35,6 @@ def show_plot(iteration,loss):
     plt.plot(iteration,loss)
     plt.show()
 
-class Config():
-    training_dir = "./dataset/training/"
-    testing_dir = "./dataset/testing/"
-    train_batch_size = 64
-    train_number_epochs = 100
-    RESIZE = (300, 300)
-
 class Augmenter():
 
     def __init__(self, seq):
@@ -452,6 +445,12 @@ class ContrastiveLoss(torch.nn.Module):
 
         return loss_contrastive
 
+class Config():
+    training_dir = "./dataset/training/"
+    testing_dir = "./dataset/testing/"
+    train_batch_size = 64
+    train_number_epochs = 100
+    RESIZE = (250, 250)
 
 if __name__ == "__main__":
     # Augmentation Demo
