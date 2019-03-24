@@ -496,7 +496,7 @@ if __name__ == "__main__":
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    net = SiameseNetwork(size=(300, 300))
+    net = SiameseNetwork(size=(250, 250))
 
     if device.type == 'cpu':
         model = torch.nn.DataParallel(net)
