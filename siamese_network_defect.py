@@ -391,6 +391,65 @@ class DefectDataset(torch.utils.data.Dataset):
         return [relative_x_of_center, relative_y_of_center,
                 relative_box_width, relative_box_height]
 
+class SiameseNetwork(nn.Module):
+    def __init__(self):
+        super(SiameseNetwork, self).__init__()
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.cnn1 = nn.Sequential(
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(1, 4, kernel_size=3),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(4),
+
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(4, 8, kernel_size=3),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(8),
+
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(8, 8, kernel_size=3),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(8),
+
+        )
+
+        self.fc1 = nn.Sequential(
+            nn.Linear(8 * 720 * 720, 500),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(500, 500),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(500, 5))
+
+    def forward_once(self, x):
+        output = self.cnn1(x)
+        output = output.view(output.size()[0], -1)
+        output = self.fc1(output)
+        return output
+
+    def forward(self, input1, input2):
+        output1 = self.forward_once(input1)
+        output2 = self.forward_once(input2)
+        return output1, output2
+
+    def summary(self):
+        summary(self, torch.zeros((1, 1, 720, 720)), input2=torch.zeros((1, 1, 720, 720)))
+
+
+class ContrastiveLoss(torch.nn.Module):
+
+    def __init__(self, margin=2.0):
+        super(ContrastiveLoss, self).__init__()
+        self.margin = margin
+
+    def forward(self, output1, output2, label):
+        euclidean_distance = F.pairwise_distance(output1, output2)
+        loss_contrastive = torch.mean((1 - label) * torch.pow(euclidean_distance, 2) +
+                                      (label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
+
+        return loss_contrastive
+
 
 if __name__ == "__main__":
     # Augmentation Demo
@@ -428,66 +487,6 @@ if __name__ == "__main__":
     print(example_batch[2].numpy())
     print(example_batch[0].shape)
 
-
-    class SiameseNetwork(nn.Module):
-        def __init__(self):
-            super(SiameseNetwork, self).__init__()
-            self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-            self.cnn1 = nn.Sequential(
-                nn.ReflectionPad2d(1),
-                nn.Conv2d(1, 4, kernel_size=3),
-                nn.ReLU(inplace=True),
-                nn.BatchNorm2d(4),
-
-                nn.ReflectionPad2d(1),
-                nn.Conv2d(4, 8, kernel_size=3),
-                nn.ReLU(inplace=True),
-                nn.BatchNorm2d(8),
-
-                nn.ReflectionPad2d(1),
-                nn.Conv2d(8, 8, kernel_size=3),
-                nn.ReLU(inplace=True),
-                nn.BatchNorm2d(8),
-
-            )
-
-            self.fc1 = nn.Sequential(
-                nn.Linear(8 * 720 * 720, 500),
-                nn.ReLU(inplace=True),
-
-                nn.Linear(500, 500),
-                nn.ReLU(inplace=True),
-
-                nn.Linear(500, 5))
-
-        def forward_once(self, x):
-            output = self.cnn1(x)
-            output = output.view(output.size()[0], -1)
-            output = self.fc1(output)
-            return output
-
-        def forward(self, input1, input2):
-            output1 = self.forward_once(input1)
-            output2 = self.forward_once(input2)
-            return output1, output2
-
-        def summary(self):
-            summary(self, torch.zeros((1, 1, 720, 720)), input2=torch.zeros((1, 1, 720, 720)))
-
-    class ContrastiveLoss(torch.nn.Module):
-
-        def __init__(self, margin=2.0):
-            super(ContrastiveLoss, self).__init__()
-            self.margin = margin
-
-        def forward(self, output1, output2, label):
-            euclidean_distance = F.pairwise_distance(output1, output2)
-            loss_contrastive = torch.mean((1-label) * torch.pow(euclidean_distance, 2) +
-                                          (label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
-
-
-            return loss_contrastive
-
     train_dataloader = DataLoader(siamese_dataset,
                             shuffle=True,
                             num_workers=0,
@@ -495,7 +494,14 @@ if __name__ == "__main__":
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    net = SiameseNetwork().to(device)
+    net = SiameseNetwork()
+
+    if device.type == 'cpu':
+        model = torch.nn.DataParallel(net)
+    else:
+        model = torch.nn.DataParallel(net, device_ids=[0, 1]).cuda()
+
+    model.to(device)
     criterion = ContrastiveLoss()
     optimizer = optim.Adam(net.parameters(),lr = 0.0005)
 
@@ -509,7 +515,7 @@ if __name__ == "__main__":
             img0, img1, label = img0.to(device), img1.to(device), label.to(device)
 
             optimizer.zero_grad()
-            output1, output2 = net(img0, img1)
+            output1, output2 = model(img0, img1)
 
             label = label.double()
             output1 = output1.double()
@@ -529,7 +535,7 @@ if __name__ == "__main__":
     save_checkpoint({
                     'epoch': epoch + 1,
                     'arch': "YOLOv1",
-                    'state_dict': net.state_dict(),
+                    'state_dict': model.state_dict(),
                     'optimizer': optimizer.state_dict(),
                 }, False, filename=os.path.join("./", 'result.pth.tar'))
 
