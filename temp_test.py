@@ -12,9 +12,9 @@ import torchvision.utils
 import imgaug as ia
 from torch.utils.data import DataLoader,Dataset
 from torch.autograd import Variable
-from torch import optim
 from imgaug import augmenters as iaa
 from PIL import Image
+from torchsummaryX import summary
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     torch.save(state, filename)
@@ -212,7 +212,7 @@ class DefectDataset(torch.utils.data.Dataset):
         normal_img = self.pil_loader(imgs["normal"])
         defect_img = self.pil_loader(imgs["defect"])
 
-        if self.transform:
+        if self.transform != None:
             normal_aug_img, defect_aug_img, aug_label = self.transform([normal_img, defect_img, label])
 
             if random.choice([True, False]):
@@ -225,7 +225,8 @@ class DefectDataset(torch.utils.data.Dataset):
                 image1 = normal_img.resize((100, 100), Image.ANTIALIAS)
                 image2 = defect_img.resize((100, 100), Image.ANTIALIAS)
                 label = np.array([1.], dtype=np.float)
-        else:
+
+        elif self.transform == None:
             image1 = normal_img.resize((100, 100), Image.ANTIALIAS)
             image2 = defect_img.resize((100, 100), Image.ANTIALIAS)
 
@@ -389,41 +390,6 @@ class DefectDataset(torch.utils.data.Dataset):
         return [relative_x_of_center, relative_y_of_center,
                 relative_box_width, relative_box_height]
 
-# Augmentation Demo
-seq = iaa.Sequential([
-            iaa.Resize({"height": 100, "width": 100}),
-            iaa.SomeOf(2, [iaa.Multiply((1, 1.1)),  # change brightness, doesn't affect BBs
-                            iaa.Affine(
-                                translate_px={"x": 5, "y": 5},
-                                scale=(1, 1)
-                            ),  # translate by 40/60px on x/y axis, and scale to 50-70%, affects BBs
-                            iaa.GaussianBlur(sigma=(0.0, 0.1)),
-                            iaa.Affine(rotate=(-10, 10)),
-                            ])
-            #iaa.Sharpen(alpha=(0, 0.0001)),
-            #iaa.Fliplr(0.5)
-            ])
-
-#seq = iaa.Sometimes(0.5, iaa.Crop(percent=(0.4)))
-#seq = iaa.Sequential([iaa.Crop(percent=(0.3))])
-composed = transforms.Compose([Augmenter(seq)])
-
-siamese_dataset = DefectDataset(root=Config.training_dir, transform=composed)
-
-vis_dataloader = DataLoader(siamese_dataset,
-                        shuffle=True,
-                        num_workers=0,
-                        batch_size=8)
-dataiter = iter(vis_dataloader)
-
-
-example_batch = next(dataiter)
-concatenated = torch.cat((example_batch[0],example_batch[1]),0)
-imshow(torchvision.utils.make_grid(concatenated))
-print(example_batch[2].numpy())
-print(example_batch[0].shape)
-
-
 class SiameseNetwork(nn.Module):
     def __init__(self):
         super(SiameseNetwork, self).__init__()
@@ -447,7 +413,7 @@ class SiameseNetwork(nn.Module):
         )
 
         self.fc1 = nn.Sequential(
-            nn.Linear(8 * 100 * 100, 500),
+            nn.Linear(8 * 720 * 720, 500),
             nn.ReLU(inplace=True),
 
             nn.Linear(500, 500),
@@ -466,80 +432,49 @@ class SiameseNetwork(nn.Module):
         output2 = self.forward_once(input2)
         return output1, output2
 
-class ContrastiveLoss(torch.nn.Module):
-
-    def __init__(self, margin=2.0):
-        super(ContrastiveLoss, self).__init__()
-        self.margin = margin
-
-    def forward(self, output1, output2, label):
-        euclidean_distance = F.pairwise_distance(output1, output2)
-        loss_contrastive = torch.mean((1-label) * torch.pow(euclidean_distance, 2) +
-                                      (label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
-
-
-        return loss_contrastive
-
-train_dataloader = DataLoader(siamese_dataset,
-                        shuffle=True,
-                        num_workers=0,
-                        batch_size=Config.train_batch_size)
+    def summary(self):
+        summary(self, torch.zeros((1, 1, 720, 720)), input2=torch.zeros((1, 1, 720, 720)))
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
 net = SiameseNetwork().to(device)
-criterion = ContrastiveLoss()
-optimizer = optim.Adam(net.parameters(),lr = 0.0005)
+net.summary()
+exit()
+net.load_state_dict(torch.load("./result.pth.tar", map_location=device)["state_dict"])
+net.eval()
+seq = iaa.Sequential([
+            iaa.Resize({"height": 100, "width": 100})
+            ])
 
-counter = []
-loss_history = []
-iteration_number= 0
+composed = transforms.Compose([Augmenter(seq)])
 
-for epoch in range(0, Config.train_number_epochs):
-    for i, data in enumerate(train_dataloader, 0):
-        img0, img1, label = data
-        img0, img1, label = img0.to(device), img1.to(device), label.to(device)
+dataset = DefectDataset(root=Config.testing_dir, transform=composed)
 
-        optimizer.zero_grad()
-        output1, output2 = net(img0, img1)
+vis_dataloader = DataLoader(dataset,
+                        shuffle=True,
+                        num_workers=0,
+                        batch_size=8)
 
-        label = label.double()
-        output1 = output1.double()
-        output2 = output2.double()
-
-        loss_contrastive = criterion(output1, output2, label)
-        loss_contrastive.backward()
-        optimizer.step()
-        if i % 10 == 0:
-            print("Epoch number {}\n Current loss {}\n".format(epoch, loss_contrastive.item()))
-            iteration_number += 10
-            counter.append(iteration_number)
-            loss_history.append(loss_contrastive.item())
-
-show_plot(counter, loss_history)
-
-save_checkpoint({
-                'epoch': epoch + 1,
-                'arch': "YOLOv1",
-                'state_dict': net.state_dict(),
-                'optimizer': optimizer.state_dict(),
-            }, False, filename=os.path.join("./", 'result.pth.tar'))
+dataiter = iter(vis_dataloader)
 
 
-# TEST
+example_batch = next(dataiter)
+concatenated = torch.cat((example_batch[0],example_batch[1]),0)
+imshow(torchvision.utils.make_grid(concatenated))
+print(example_batch[2].numpy())
+print(example_batch[0].shape)
 
-"""
-siamese_dataset = DefectDataset(root=Config.testing_dir, transform=None)
 
-test_dataloader = DataLoader(siamese_dataset, num_workers=6, batch_size=1, shuffle=True)
+test_dataloader = DataLoader(dataset, num_workers=0, batch_size=1, shuffle=True)
 dataiter = iter(test_dataloader)
-x0, _, _ = next(dataiter)
 
 for i in range(10):
-    _, x1, label2 = next(dataiter)
+    x0, x1, label2 = next(dataiter)
     concatenated = torch.cat((x0, x1), 0)
 
-    output1, output2 = net(Variable(x0).cuda(), Variable(x1).cuda())
+    output1, output2 = net(Variable(x0).to(device), Variable(x1).to(device))
     euclidean_distance = F.pairwise_distance(output1, output2)
     imshow(torchvision.utils.make_grid(concatenated), 'Dissimilarity: {:.2f}'.format(euclidean_distance.item()))
-"""
+    if label2 == 0:
+        print("same")
+    elif label2 == 1:
+        print("differ")
