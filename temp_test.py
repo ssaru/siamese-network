@@ -442,7 +442,7 @@ exit()
 net.load_state_dict(torch.load("./result.pth.tar", map_location=device)["state_dict"])
 net.eval()
 seq = iaa.Sequential([
-            iaa.Resize({"height": 100, "width": 100})
+            #iaa.Resize({"height": 100, "width": 100})
             ])
 
 composed = transforms.Compose([Augmenter(seq)])

@@ -393,7 +393,7 @@ class DefectDataset(torch.utils.data.Dataset):
 
 # Augmentation Demo
 seq = iaa.Sequential([
-            iaa.Resize({"height": 100, "width": 100}),
+            #iaa.Resize({"height": 100, "width": 100}),
             iaa.SomeOf(2, [iaa.Multiply((1, 1.1)),  # change brightness, doesn't affect BBs
                             iaa.Affine(
                                 translate_px={"x": 5, "y": 5},
