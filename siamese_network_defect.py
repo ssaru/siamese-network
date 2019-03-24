@@ -22,13 +22,15 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     if is_best:
         shutil.copyfile(filename, 'model_best.pth.tar')
 
-def imshow(img,text=None,should_save=False):
+def imshow(img,text=None,should_save=False, name=None):
     npimg = img.numpy()
     plt.axis("off")
     if text:
         plt.text(75, 8, text, style='italic',fontweight='bold',
             bbox={'facecolor':'white', 'alpha':0.8, 'pad':10})
     plt.imshow(np.transpose(npimg, (1, 2, 0)), cmap=plt.cm.gray)
+    if should_save:
+        plt.savefig(name)
     plt.show()
 
 def show_plot(iteration,loss):
@@ -222,8 +224,16 @@ class DefectDataset(torch.utils.data.Dataset):
                 label = np.array([1.], dtype=np.float)
 
         elif self.transform == None:
-            image1 = normal_img.resize((Config.RESIZE[0], Config.RESIZE[1]), Image.ANTIALIAS)
-            image2 = defect_img.resize((Config.RESIZE[0], Config.RESIZE[1]), Image.ANTIALIAS)
+            if random.choice([True, False]):
+                # same image
+                image1 = normal_img.resize((Config.RESIZE[0], Config.RESIZE[1]), Image.ANTIALIAS)
+                image2 = normal_img.resize((Config.RESIZE[0], Config.RESIZE[1]), Image.ANTIALIAS)
+                label = np.array([0.], dtype=np.float)
+            else:
+                # difference image
+                image1 = normal_img.resize((Config.RESIZE[0], Config.RESIZE[1]), Image.ANTIALIAS)
+                image2 = defect_img.resize((Config.RESIZE[0], Config.RESIZE[1]), Image.ANTIALIAS)
+                label = np.array([1.], dtype=np.float)
 
         image1 = image1.convert('L')
         image2 = image2.convert('L')
