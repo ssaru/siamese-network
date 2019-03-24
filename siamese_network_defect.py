@@ -218,18 +218,18 @@ class DefectDataset(torch.utils.data.Dataset):
 
             if random.choice([True, False]):
                 # same image
-                image1 = normal_img.resize((720, 720), Image.ANTIALIAS)
+                image1 = normal_img.resize((500, 500), Image.ANTIALIAS)
                 image2 = normal_aug_img
                 label = np.array([0.], dtype=np.float)
             else:
                 # difference image
-                image1 = normal_img.resize((720, 720), Image.ANTIALIAS)
-                image2 = defect_img.resize((720, 720), Image.ANTIALIAS)
+                image1 = normal_img.resize((500, 500), Image.ANTIALIAS)
+                image2 = defect_img.resize((500, 500), Image.ANTIALIAS)
                 label = np.array([1.], dtype=np.float)
 
         elif self.transform == None:
-            image1 = normal_img.resize((720, 720), Image.ANTIALIAS)
-            image2 = defect_img.resize((720, 720), Image.ANTIALIAS)
+            image1 = normal_img.resize((500, 500), Image.ANTIALIAS)
+            image2 = defect_img.resize((500, 500), Image.ANTIALIAS)
 
         image1 = image1.convert('L')
         image2 = image2.convert('L')
@@ -414,7 +414,7 @@ class SiameseNetwork(nn.Module):
         )
 
         self.fc1 = nn.Sequential(
-            nn.Linear(8 * 720 * 720, 500),
+            nn.Linear(8 * 500 * 500, 500),
             nn.ReLU(inplace=True),
 
             nn.Linear(500, 500),
@@ -434,7 +434,7 @@ class SiameseNetwork(nn.Module):
         return output1, output2
 
     def summary(self):
-        summary(self, torch.zeros((1, 1, 720, 720)), input2=torch.zeros((1, 1, 720, 720)))
+        summary(self, torch.zeros((1, 1, 500, 500)), input2=torch.zeros((1, 1, 500, 500)))
 
 
 class ContrastiveLoss(torch.nn.Module):
@@ -454,7 +454,7 @@ class ContrastiveLoss(torch.nn.Module):
 if __name__ == "__main__":
     # Augmentation Demo
     seq = iaa.Sequential([
-                #iaa.Resize({"height": 100, "width": 100}),
+                iaa.Resize({"height": 500, "width": 500}),
                 iaa.SomeOf(2, [iaa.Multiply((1, 1.1)),  # change brightness, doesn't affect BBs
                                 iaa.Affine(
                                     translate_px={"x": 5, "y": 5},
