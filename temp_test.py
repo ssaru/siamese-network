@@ -18,9 +18,18 @@ from torchsummaryX import summary
 
 from siamese_network_defect import SiameseNetwork, DefectDataset, imshow, Augmenter, Config
 
+# Visualize feature maps
+activation = {}
+def get_activation(name):
+    def hook(model, input, output):
+        activation[name] = output.detach()
+    return hook
+
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 net = SiameseNetwork(size=(250, 250))
 net.summary()
+
+net.cnn1.register_forward_hook(get_activation('conv1'))
 
 if device.type == 'cpu':
     model = torch.nn.DataParallel(net)
@@ -32,6 +41,7 @@ model.to(device)
 
 model.load_state_dict(torch.load("./result.pth.tar", map_location=device)["state_dict"])
 model.eval()
+
 seq = iaa.Sequential([
             iaa.Resize({"height": Config.RESIZE[0], "width": Config.RESIZE[1]})
             ])
@@ -66,9 +76,15 @@ for j in range(2):
         output1, output2 = model(Variable(x0).to(device), Variable(x1).to(device))
         euclidean_distance = F.pairwise_distance(output1, output2)
         distance = euclidean_distance.item()
+
         imshow(torchvision.utils.make_grid(concatenated), 'Pred : {}, Label : {}, Dissimilarity: {:.2f}'
                                                             .format("Same" if distance < 1.5 else "Differ",
                                                                     "Same" if label2 == 0 else "Differ",
                                                                     euclidean_distance.item()),
                should_save=True, name=str(j)+str(i))
 
+        act = activation['conv1'].squeeze()
+        for idx in range(act.size(0)):
+            plt.figure()
+            plt.imshow(act[idx], cmap='gray')
+            plt.savefig(str(j)+str(i)+"_"+str(idx)+"_activation")
